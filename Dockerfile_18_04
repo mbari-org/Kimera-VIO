@@ -1,119 +1,154 @@
-# Use an official Python runtime as a parent image
 FROM ubuntu:18.04
+ENV DEBIAN_FRONTEND noninteractive
 
-MAINTAINER Antoni Rosinol "arosinol@mit.edu"
+ENV DIRPATH /root
+WORKDIR ${DIRPATH}
 
-# To avoid tzdata asking for geographic location...
-ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update -y && \
+    apt-get install -y --no-install-recommends \
+        apt-utils \
+        git cmake build-essential pkg-config \
+        xvfb \
+        unzip \
+        libjpeg-dev libpng-dev libtiff-dev \
+        libvtk6-dev \
+        libgtk-3-dev \
+        libatlas-base-dev gfortran \
+        libboost-all-dev libtbb-dev \
+        libgflags2.2 libgflags-dev libgoogle-glog0v5 libgoogle-glog-dev \
+        ca-certificates \
+        ffmpeg \
+        libglew-dev && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
-# Set the working directory to /root
-ENV DIRPATH /root/
-WORKDIR $DIRPATH
+ARG CMAKE_INSTALL_PREFIX=/usr/local
+ARG NUM_THREADS=1
 
-#Install build dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends apt-utils
-RUN apt-get update && apt-get install -y git cmake build-essential pkg-config
+# Clone OpenCV @ tags/3.3.1
+RUN git clone https://github.com/opencv/opencv.git && \
+    cd opencv && \
+    git checkout tags/3.3.1
 
-# Install xvfb to provide a display to container for GUI realted testing.
-RUN apt-get update && apt-get install -y xvfb
+# Clone OpenCV contrib @ tags/3.3.1
+RUN git clone https://github.com/opencv/opencv_contrib.git && \
+    cd opencv_contrib && \
+    git checkout tags/3.3.1
 
-# Install OpenCV for Ubuntu 18.04
-RUN apt-get update && apt-get install -y \
-      unzip \
-      libjpeg-dev libpng-dev libtiff-dev \
-      libvtk6-dev \
-      libgtk-3-dev \
-      libatlas-base-dev gfortran
-
-RUN git clone https://github.com/opencv/opencv.git
+# Build and install OpenCV
 RUN cd opencv && \
-      git checkout tags/3.3.1 && \
-      mkdir build
-
-RUN git clone https://github.com/opencv/opencv_contrib.git
-RUN cd opencv_contrib && \
-      git checkout tags/3.3.1
-
-RUN cd opencv/build && \
-      cmake -DCMAKE_BUILD_TYPE=Release \
-      -DCMAKE_INSTALL_PREFIX=/usr/local \
-      -D BUILD_opencv_python=OFF \
-      -D BUILD_opencv_python2=OFF \
-      -D BUILD_opencv_python3=OFF \
-      -DOPENCV_EXTRA_MODULES_PATH=$DIRPATH/opencv_contrib/modules .. && \
-      make -j$(nproc) install
-
-# Install GTSAM
-RUN apt-get update && apt-get install -y libboost-all-dev libtbb-dev
-ADD https://api.github.com/repos/borglab/gtsam/git/refs/heads/master version.json
-RUN git clone https://github.com/borglab/gtsam.git
-RUN cd gtsam && \
-    git fetch && \
-    git checkout develop && \
     mkdir build && \
     cd build && \
-    cmake -DCMAKE_INSTALL_PREFIX=/usr/local -DGTSAM_BUILD_TESTS=OFF -DGTSAM_BUILD_EXAMPLES_ALWAYS=OFF -DCMAKE_BUILD_TYPE=Release -DGTSAM_BUILD_UNSTABLE=ON -DGTSAM_POSE3_EXPMAP=ON -DGTSAM_ROT3_EXPMAP=ON -DGTSAM_TANGENT_PREINTEGRATION=OFF .. && \
-    make -j$(nproc) install
+    cmake \
+        -D CMAKE_INSTALL_PREFIX=$CMAKE_INSTALL_PREFIX \
+        -D CMAKE_BUILD_TYPE=Release \
+        -D OPENCV_EXTRA_MODULES_PATH=${DIRPATH}/opencv_contrib/modules \
+        -D BUILD_opencv_python=OFF \
+        -D BUILD_opencv_python2=OFF \
+        -D BUILD_opencv_python3=OFF \
+        -D WITH_TBB=ON \
+        .. && \
+    make -j${NUM_THREADS} install && \
+    cd ${DIRPATH} && rm -rf opencv && rm -rf opencv_contrib
 
-# Install Open_GV
-RUN git clone https://github.com/laurentkneip/opengv
+# Clone GTSAM @ tags/4.1.1
+RUN git clone https://github.com/borglab/gtsam.git && \
+    cd gtsam && \
+    git checkout tags/4.1.1
+
+# Build and install GTSAM
+RUN cd gtsam && \
+    mkdir build && \
+    cd build && \
+    cmake \
+        -D CMAKE_INSTALL_PREFIX=$CMAKE_INSTALL_PREFIX \
+        -D CMAKE_BUILD_TYPE=Release \
+        -D GTSAM_BUILD_TESTS=OFF \
+        -D GTSAM_BUILD_EXAMPLES_ALWAYS=OFF \
+        -DGTSAM_BUILD_UNSTABLE=ON \
+        -DGTSAM_POSE3_EXPMAP=ON \
+        -DGTSAM_ROT3_EXPMAP=ON \
+        -DGTSAM_TANGENT_PREINTEGRATION=OFF \
+        .. && \
+    make -j${NUM_THREADS} install && \
+    cd ${DIRPATH} && rm -rf gtsam/build
+# Leave GTSAM repo, since OpenGV needs its Eigen
+
+# Clone OpenGV @ 91f4b19c73450833a40e463ad3648aae80b3a7f3
+RUN git clone https://github.com/laurentkneip/opengv.git && \
+    cd opengv && \
+    git checkout 91f4b19c73450833a40e463ad3648aae80b3a7f3
+
+# Build and install OpenGV
 RUN cd opengv && \
-      mkdir build
-RUN cd opengv/build && \
-      cmake -DCMAKE_BUILD_TYPE=Release \
-      -DCMAKE_INSTALL_PREFIX=/usr/local \
-      -DEIGEN_INCLUDE_DIRS=$DIRPATH/gtsam/gtsam/3rdparty/Eigen \
-      -DEIGEN_INCLUDE_DIR=$DIRPATH/gtsam/gtsam/3rdparty/Eigen .. && \
-      make -j$(nproc) install
+    mkdir build && \
+    cd build && \
+    cmake \
+        -D CMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX} \
+        -D CMAKE_BUILD_TYPE=Release \
+        -D EIGEN_INCLUDE_DIRS=${DIRPATH}/gtsam/gtsam/3rdparty/Eigen \
+        -D EIGEN_INCLUDE_DIR=${DIRPATH}/gtsam/gtsam/3rdparty/Eigen .. && \
+    make -j${NUM_THREADS} install && \
+    cd ${DIRPATH} && rm -rf opengv
 
-# Install DBoW2
-RUN git clone https://github.com/dorian3d/DBoW2.git
+# Clone DBow2 @ 3924753db6145f12618e7de09b7e6b258db93c6e
+RUN git clone https://github.com/dorian3d/DBoW2.git && \
+    cd DBoW2 && \
+    git checkout 3924753db6145f12618e7de09b7e6b258db93c6e
+
+# Build and install DBoW2
 RUN cd DBoW2 && \
-      mkdir build && \
-      cd build && \
-      cmake .. && \
-      make -j$(nproc) install
+    mkdir build && \
+    cd build && \
+    cmake \
+        -D CMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX} \
+        -D CMAKE_BUILD_TYPE=Release \
+        .. && \
+    make -j${NUM_THREADS} install && \
+    cd ${DIRPATH} && rm -rf DBoW2
 
-# Install RobustPGO
-ADD https://api.github.com/repos/MIT-SPARK/Kimera-RPGO/git/refs/heads/master version.json
-RUN git clone https://github.com/MIT-SPARK/Kimera-RPGO.git
+# Clone Kimera-RPGO @ 19436dcf7e77ca60b30f96a0e7b1ca3a5408ca0e
+RUN git clone https://github.com/MIT-SPARK/Kimera-RPGO.git && \
+    cd Kimera-RPGO && \
+    git checkout 19436dcf7e77ca60b30f96a0e7b1ca3a5408ca0e
+
+# Build Kimera-RPGO
 RUN cd Kimera-RPGO && \
-      mkdir build && \
-      cd build && \
-      cmake .. && \
-      make -j$(nproc)
+    mkdir build && \
+    cd build && \
+    cmake \
+        -D CMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX} \
+        -D CMAKE_BUILD_TYPE=Release \
+        .. && \
+    make -j${NUM_THREADS} install && \
+    cd ${DIRPATH}
+# Leave Kimera-RPGO repo too
 
-RUN apt-get update && \
-    apt-get install software-properties-common -y
-# Get python3
-RUN apt-get update && \
-    add-apt-repository ppa:deadsnakes/ppa
-RUN apt-get update && \
-    apt-get install -y python3.6 python3.6-dev python-pip python3-pip python-tk python3-tk
-RUN python3.6 -m pip install PyQt5==5.14
+# Clone Pangolin @ tags/v0.8
+RUN git clone https://github.com/stevenlovegrove/Pangolin.git && \
+    cd Pangolin && \
+    git checkout tags/v0.8
 
-# Install evo-1 for evaluation
-# Hack to avoid Docker's cache when evo-1 master branch is updated.
-ADD https://api.github.com/repos/ToniRV/evo-1/git/refs/heads/master version.json
-RUN git clone https://github.com/ToniRV/evo-1.git
-RUN cd evo-1 && python3.6 $(which pip3) install .
-
-# Install Kimera VIO Evaluation
-RUN python3.6 $(which pip3) install ipython prompt_toolkit
-# Hack to avoid Docker's cache when Kimera VIO Evaluation master branch is updated.
-ADD https://api.github.com/repos/MIT-SPARK/Kimera-VIO-Evaluation/git/refs/heads/master version.json
-RUN git clone https://github.com/MIT-SPARK/Kimera-VIO-Evaluation.git
-# We use `pip3 install -e .` so that Jinja2 has access to the webiste template...
-RUN cd Kimera-VIO-Evaluation && git fetch && git checkout master && python3.6 $(which pip3) install -e .
-
-# Install glog, gflags
-RUN apt-get update && apt-get install -y libgflags2.2 libgflags-dev libgoogle-glog0v5 libgoogle-glog-dev
-
-# Install Pangolin
-RUN apt-get update && apt-get install -y libgl1-mesa-dev libglew-dev
-RUN git clone https://github.com/stevenlovegrove/Pangolin.git
+# Build and install Pangolin
 RUN cd Pangolin && \
-      mkdir build && \
-      cd build && \
-      cmake .. && \
-      make -j$(nproc)
+    mkdir build && \
+    cd build && \
+    cmake \
+        -D CMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX} \
+        -D CMAKE_BUILD_TYPE=Release \
+        .. && \
+    make -j${NUM_THREADS} install && \
+    cd ${DIRPATH} && rm -rf Pangolin && ldconfig
+
+# Add current directory
+ADD . ${DIRPATH}/Kimera-VIO
+
+# Build Kimera-VIO
+RUN cd Kimera-VIO && \
+    mkdir build && \
+    cd build && \
+    cmake .. && \
+    make -j${NUM_THREADS}
+
+# Set default command to bash
+CMD ["/bin/bash"]
