@@ -174,7 +174,7 @@ target_compile_options(${PROJECT_NAME}
 
 # We would just need to say cxx_std_11 if we were using cmake 3.8
 target_compile_features(${PROJECT_NAME} PUBLIC
-        cxx_auto_type cxx_constexpr cxx_range_for cxx_nullptr cxx_override)
+        cxx_auto_type cxx_std_17 cxx_constexpr cxx_range_for cxx_nullptr cxx_override)
 
 # Add an alias so that library can be used inside the build tree,
 # e.g. when testing
