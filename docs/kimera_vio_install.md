@@ -29,5 +29,6 @@ Once in the container, you can run the Kimera-VIO pipeline as normal:
 
 ```bash
 # e.g.
+cd Kimera-VIO
 ./scripts/stereoVIOEuroc.bash -p /Euroc/V1_01_easy
 ```
