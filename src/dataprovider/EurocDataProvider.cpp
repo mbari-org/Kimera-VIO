@@ -305,12 +305,7 @@ bool EurocDataProvider::parseImuData(const std::string& input_dataset_path,
 bool EurocDataProvider::parseGtData(const std::string& input_dataset_path,
                                     const std::string& gt_sensor_name) {
   CHECK(!input_dataset_path.empty());
-  if (gt_sensor_name.empty()) {
-    LOG(WARNING) << "No ground truth sensor name provided, skipping ground truth "
-                    "parsing.";
-    return false;
-  }
-  // CHECK(!gt_sensor_name.empty());
+  CHECK(!gt_sensor_name.empty());
 
   std::string filename_sensor =
       input_dataset_path + "/mav0/" + gt_sensor_name + "/sensor.yaml";
@@ -455,7 +450,7 @@ bool EurocDataProvider::parseDataset() {
   // CHECK(sanityCheckCameraData(camera_names_, &camera_image_lists_));
 
   // Parse Ground-Truth data.
-  static const std::string ground_truth_name = "";
+  static const std::string ground_truth_name = "state_groundtruth_estimate0";
   is_gt_available_ = parseGtData(dataset_path_, ground_truth_name);
 
   clipFinalFrame();
